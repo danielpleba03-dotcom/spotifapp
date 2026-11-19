@@ -126,7 +126,7 @@ export function advanceListening(previous, playback, now) {
 }
 
 export class SpotifyClient {
-  constructor({ clientId, storage = localStorage, fetcher = fetch, onStatus = () => {} }) {
+  constructor({ clientId, storage = localStorage, fetcher = globalThis.fetch.bind(globalThis), onStatus = () => {} }) {
     this.clientId = clientId;
     this.storage = storage;
     this.fetcher = fetcher;
