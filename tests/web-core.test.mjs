@@ -167,3 +167,18 @@ test('502 writes are surfaced once rather than silently replayed', async () => {
   await assert.rejects(client.request('playlists/mine/items', { method: 'POST', body: { uris: ['spotify:track:a'] } }), error => error.status === 502);
   assert.equal(calls, 1);
 });
+
+
+test('default browser fetch keeps the global receiver for token requests', async () => {
+  const previous = globalThis.fetch;
+  const memory = storage();
+  globalThis.fetch = async function () {
+    assert.equal(this, globalThis);
+    return new Response(JSON.stringify({access_token: 'test', expires_in: 3600}), {status: 200});
+  };
+  try {
+    const client = new SpotifyClient({clientId: 'test', storage: memory});
+    await client.tokenRequest(new URLSearchParams({grant_type: 'refresh_token'}));
+  } finally { globalThis.fetch = previous; }
+});
+
