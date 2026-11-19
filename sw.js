@@ -1,4 +1,4 @@
-const CACHE = 'spotifyp-web-v1';
+const CACHE = 'spotifyp-web-v2';
 const SHELL = ['./', './index.html', './style.css', './app.js', './core.js', './config.js', './manifest.webmanifest', './assets/icon-192.png', './assets/icon-512.png'];
 
 self.addEventListener('install', event => {
