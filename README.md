@@ -2,6 +2,28 @@
 
 Applicazione desktop Python per gestire i preferiti di Spotify e la playlist personale **Miei brani**.
 
+## App web installabile
+
+Apri [Spotify P nel browser](https://danielpleba03-dotcom.github.io/spotifapp/). In Chrome premi **Installa app**, quando compare, oppure usa il comando di installazione del sito nel menu del browser.
+
+Per il primo collegamento, nelle impostazioni della tua app Spotify for Developers aggiungi questo **Redirect URI**, compreso lo slash finale:
+
+```text
+https://danielpleba03-dotcom.github.io/spotifapp/
+```
+
+Il collegamento usa Authorization Code con PKCE. La configurazione include l’identificativo pubblico dell’app Spotify esistente e può essere cambiata dal pulsante Impostazioni. L’autorizzazione personale viene salvata nel browser.
+
+Il conteggio di due minuti richiede che l’app sia aperta e visibile. Pause, cambi di brano, riavvii e sospensioni del browser fanno ripartire l’attesa.
+
+La pulizia dei duplicati conserva la prima copia dei gruppi selezionati e riscrive l’elenco mantenendone l’ordine. Le date di aggiunta vengono aggiornate. Prima della modifica salva un backup locale e un piano riprendibile. Gli elementi locali o non disponibili impediscono la riscrittura automatica per evitare perdite.
+
+Per verificare la logica web:
+
+```text
+node --test tests/web-core.test.mjs
+```
+
 ## Installazione su Windows
 
 Scarica [SpotifyP-Setup.exe](https://github.com/danielpleba03-dotcom/spotifapp/releases/latest/download/SpotifyP-Setup.exe), aprilo e segui la procedura guidata. Troverai **Spotify P** nel menu Start. Non serve installare Python.
