@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="it" class="access-locked">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,9 +11,18 @@
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
-  <script type="module" src="app.js"></script>
+  <link rel="stylesheet" href="./initial-access.css?v=1"><script type="module" src="./initial-access.mjs?v=1"></script>
 </head>
 <body>
+<main id="initial-access" aria-labelledby="access-title"><div class="access-card">
+  <h1 id="access-title">Spotify P</h1>
+  <form hidden><label for="access-code">Codice di accesso</label>
+  <input id="access-code" name="accessCode" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="128" required>
+  <button type="submit">Entra</button></form>
+  <p id="access-feedback" role="status">Caricamento della verifica di accesso…</p>
+  <noscript>Attiva JavaScript per inserire il codice di accesso.</noscript>
+</div></main>
+
   <header class="topbar">
     <a class="brand" href="./" aria-label="Spotify P, pagina iniziale"><img src="assets/icon-192.png" width="44" height="44" alt=""><span>Spotify <b>P</b></span></a>
   </header>
