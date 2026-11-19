@@ -1,7 +1,7 @@
-const CACHE = 'spotifyp-web-v3-identity';
+const CACHE = 'spotifyp-web-v4-fetch';
 const APP_PATH = '/spotifapp/';
 const APP_URL = new URL(APP_PATH, self.location.origin);
-const FILES = ['', 'index.html', 'style.css', 'app.js', 'core.js', 'config.js', 'manifest.webmanifest', 'assets/icon-192.png', 'assets/icon-512.png'];
+const FILES = ['', 'index.html', 'style.css', 'app.js', 'core.js?v=20261120-fetch', 'config.js', 'manifest.webmanifest', 'assets/icon-192.png', 'assets/icon-512.png'];
 const SHELL = FILES.map(file => new URL(file, APP_URL).href);
 
 self.addEventListener('install', event => {
