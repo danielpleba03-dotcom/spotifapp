@@ -1,0 +1,21 @@
+SPOTIFY P - WINDOWS
+
+Apri SpotifyP.exe con un doppio clic. Non serve installare Python.
+Avvia anche Spotify e metti in riproduzione un brano.
+
+Sul computer con la vecchia app in C:\Spotifapp viene riutilizzata
+la configurazione esistente. Spotify potrebbe chiedere di autorizzare l'accesso.
+
+Su un nuovo computer: inserisci il Client ID della tua applicazione Spotify
+quando richiesto. Puoi cambiarlo da Strumenti > Configura Spotify.
+Il redirect da registrare in Spotify for Developers è:
+http://127.0.0.1:8888/callback
+
+Configurazione e autorizzazione sono conservate solo sul computer,
+nella cartella locale SpotifyP dei dati utente.
+Il pacchetto non include password, file .env personali o token Spotify.
+
+Seleziona Rimuovi preferiti oppure Aggiungi a Miei brani e premi Avvia.
+Il pulsante diventa Ferma. L'attesa è di 2 minuti per entrambe le modalità.
+Se cambi brano prima, non viene aggiunto né rimosso.
+In modalità Aggiungi i brani già in Miei brani sono saltati subito.

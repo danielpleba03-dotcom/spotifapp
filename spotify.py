@@ -1,5 +1,7 @@
 import os
+import sys
 import time
+import math
 import queue
 import threading
 import re
@@ -7,11 +9,12 @@ import unicodedata
 import webbrowser
 import tkinter as tk
 
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import messagebox, scrolledtext, ttk, simpledialog
 
 import spotipy
+import requests
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 from spotipy.oauth2 import SpotifyPKCE
 from spotipy.exceptions import SpotifyException
 
@@ -20,8 +23,17 @@ from spotipy.exceptions import SpotifyException
 # CONFIGURAZIONE
 # ==========================================================
 
-CARTELLA = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(CARTELLA, ".env"))
+if getattr(sys, "frozen", False):
+    # Persist configuration and OAuth outside the temporary executable bundle.
+    CARTELLA = os.path.join(os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "SpotifyP")
+    os.makedirs(CARTELLA, exist_ok=True)
+    load_dotenv(os.path.join(CARTELLA, ".env"))
+    load_dotenv(os.path.join(os.path.dirname(sys.executable), ".env"))
+    # Reuse the existing app configuration on the original computer, never bundle it.
+    load_dotenv(r"C:\Spotifapp\.env")
+else:
+    CARTELLA = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(CARTELLA, ".env"))
 
 CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 
@@ -59,12 +71,41 @@ messaggi = queue.Queue()
 # CONNESSIONE A SPOTIFY
 # ==========================================================
 
+def configura_spotify():
+    global CLIENT_ID, spotify
+    if any(thread and thread.is_alive() for thread in (thread_lavoro, thread_playlist, thread_duplicati)):
+        messagebox.showinfo("Spotify", "Ferma le operazioni in corso prima di cambiare configurazione.")
+        return
+    valore = simpledialog.askstring(
+        "Configura Spotify",
+        "Inserisci il Client ID della tua applicazione Spotify.\n"
+        "Nel portale Spotify for Developers registra questo indirizzo:\n"
+        "http://127.0.0.1:8888/callback",
+        initialvalue=CLIENT_ID or "", parent=finestra
+    )
+    if valore is None:
+        return
+    valore = valore.strip()
+    if not re.fullmatch(r"[a-fA-F0-9]{32}", valore):
+        messagebox.showerror("Client ID non valido", "Inserisci il Client ID Spotify di 32 caratteri.")
+        return
+    percorso = os.path.join(CARTELLA, ".env")
+    os.makedirs(CARTELLA, exist_ok=True)
+    set_key(percorso, "SPOTIPY_CLIENT_ID", valore)
+    if CLIENT_ID != valore and os.path.isfile(CACHE_PATH):
+        # Retain the old token locally without reusing it with another application.
+        os.replace(CACHE_PATH, CACHE_PATH + ".precedente")
+    CLIENT_ID = valore
+    spotify = None
+    messagebox.showinfo("Spotify", "Configurazione salvata. Ora puoi avviare l'operazione desiderata.")
+
+
 def connetti_spotify():
     global spotify
 
     if not CLIENT_ID:
         raise RuntimeError(
-            "Client ID mancante nel file .env."
+            'Apri Strumenti > Configura Spotify e inserisci il tuo Client ID.'
         )
 
     auth_manager = SpotifyPKCE(
@@ -76,8 +117,10 @@ def connetti_spotify():
 
     spotify = spotipy.Spotify(
         auth_manager=auth_manager,
+        requests_session=requests.Session(),
         requests_timeout=10,
-        retries=0
+        retries=0,
+        status_retries=0
     )
 
     utente = spotify.current_user()
@@ -211,6 +254,125 @@ def trova_playlist_miei_brani(crea=False):
     return trovate[0]
 
 
+def snapshot_playlist(playlist_id, interrompibile=False):
+    dati = richiesta_playlist(spotify._get, f"playlists/{playlist_id}",
+        fields="snapshot_id", _interrompibile=interrompibile)
+    snapshot = dati.get("snapshot_id")
+    if not snapshot:
+        raise RuntimeError("Spotify non ha restituito la versione della playlist. Ripeti la scansione.")
+    return snapshot
+
+
+def copie_da_eliminare(dati):
+    copie = []
+    for gruppo in dati["risultati"]:
+        # Keep the earliest occurrence, including when the URI is identical.
+        ordinate = sorted(gruppo["copie"], key=lambda voce: voce["posizione"])
+        for voce in ordinate[1:]:
+            if (voce.get("uri") or "").startswith("spotify:track:"):
+                copie.append(voce)
+    return sorted(copie, key=lambda voce: voce["posizione"], reverse=True)
+
+
+def rimuovi_blocco_duplicati(playlist_id, elementi, snapshot):
+    for tentativo in range(5):
+        if stop_event.is_set():
+            raise OperazioneInterrotta("Rimozione duplicati fermata.")
+        # Revalidate after each wait. Never replay positions against another version.
+        if snapshot_playlist(playlist_id, interrompibile=True) != snapshot:
+            raise RuntimeError(
+                "La playlist è cambiata. Ripeti Cerca duplicati prima di continuare."
+            )
+        try:
+            return spotify._delete(
+                f"playlists/{playlist_id}/items",
+                payload={"items": elementi, "snapshot_id": snapshot}
+            )
+        except SpotifyException as errore:
+            if errore.http_status not in (429, 500, 502, 503, 504) or tentativo == 4:
+                raise
+            attendi_richiesta_spotify(errore, tentativo, interrompibile=True)
+
+
+def elimina_copie_duplicate(dati):
+    playlist_id = dati["playlist_id"]
+    snapshot = dati["snapshot_id"]
+    copie = copie_da_eliminare(dati)
+    rimossi = 0
+    for inizio in range(0, len(copie), 100):
+        if stop_event.is_set():
+            return f"Operazione fermata. Copie aggiuntive rimosse: {rimossi}."
+        if snapshot_playlist(playlist_id, interrompibile=True) != snapshot:
+            raise RuntimeError(
+                f"La playlist è cambiata. Copie già rimosse: {rimossi}. Ripeti Cerca duplicati."
+            )
+        blocco = copie[inizio:inizio + 100]
+        # Delete specific positions from the end, never every occurrence of a URI.
+        posizioni_per_uri = {}
+        for voce in blocco:
+            posizioni_per_uri.setdefault(voce["uri"], []).append(voce["posizione"])
+        elementi = [{"uri": uri, "positions": posizioni} for uri, posizioni in posizioni_per_uri.items()]
+        try:
+            risultato = rimuovi_blocco_duplicati(playlist_id, elementi, snapshot)
+        except OperazioneInterrotta:
+            return f"Operazione fermata. Copie aggiuntive rimosse: {rimossi}."
+        except Exception as errore:
+            # Do not retry a positional write with an uncertain outcome.
+            raise RuntimeError(
+                f"Rimozione interrotta. Copie rimosse confermate: {rimossi}. "
+                "L'ultimo gruppo potrebbe essere stato elaborato. Ripeti Cerca duplicati prima di riprovare. "
+                f"Dettaglio: {errore}"
+            ) from errore
+        snapshot = (risultato or {}).get("snapshot_id")
+        rimossi += len(blocco)
+        if not snapshot:
+            raise RuntimeError(
+                f"Versione playlist non ricevuta dopo {rimossi} rimozioni. Ripeti Cerca duplicati."
+            )
+        messaggi.put(("log", f"Copie aggiuntive rimosse: {rimossi} di {len(copie)}."))
+    return f"Rimosse {rimossi} copie aggiuntive da Miei brani. Conservata la prima copia di ogni gruppo."
+
+
+def avvia_rimozione_duplicati(dati, finestra_risultati):
+    global thread_playlist
+    if thread_playlist and thread_playlist.is_alive():
+        messagebox.showinfo("Operazione in corso", "Attendi la fine dell'operazione in corso.")
+        return
+    copie = copie_da_eliminare(dati)
+    if not copie:
+        messagebox.showinfo("Duplicati", "Nessuna copia aggiuntiva rimovibile trovata.")
+        return
+    if not messagebox.askyesno(
+        "Elimina copie aggiuntive",
+        f"Vuoi rimuovere {len(copie)} copie aggiuntive dalla playlist Miei brani?\n\n"
+        "Verrà conservata la prima copia di ogni gruppo nell'ordine della playlist.\n"
+        "Il confronto usa titolo e artisti: verifica i risultati, perché potrebbero includere versioni diverse.",
+        parent=finestra_risultati, icon="warning", default="no"
+    ):
+        return
+    stop_event.set()
+    finestra_risultati.destroy()
+    etichetta_stato.config(text="Rimozione delle copie aggiuntive in corso...")
+
+    def lavoro():
+        try:
+            if thread_lavoro and thread_lavoro.is_alive():
+                thread_lavoro.join()
+            if thread_duplicati and thread_duplicati.is_alive():
+                thread_duplicati.join()
+            stop_event.clear()
+            riepilogo = elimina_copie_duplicate(dati)
+            messaggi.put(("duplicati_rimossi", riepilogo))
+        except Exception as errore:
+            messaggi.put(("errore_rimozione_duplicati", str(errore)))
+        finally:
+            stop_event.set()
+
+    thread_playlist = threading.Thread(target=lavoro, daemon=True)
+    thread_playlist.start()
+    aggiorna_pulsanti()
+
+
 def scansione_duplicati():
     """
     Legge tutti i brani della playlist personale Miei brani.
@@ -229,6 +391,7 @@ def scansione_duplicati():
     ))
 
     playlist = trova_playlist_miei_brani()
+    snapshot = snapshot_playlist(playlist["id"])
     gruppi = {}
     offset = 0
     limite = 50
@@ -255,7 +418,7 @@ def scansione_duplicati():
         if not elementi:
             break
 
-        for elemento in elementi:
+        for indice, elemento in enumerate(elementi):
 
             track = elemento.get("item") or elemento.get("track")
 
@@ -275,6 +438,8 @@ def scansione_duplicati():
 
             voce = {
                 "id": track.get("id"),
+                "uri": (track.get("linked_from") or {}).get("uri") or track.get("uri"),
+                "posizione": offset + indice,
                 "nome": track.get("name", ""),
                 "artista": ", ".join(
                     artista.get("name", "")
@@ -301,6 +466,9 @@ def scansione_duplicati():
 
         if not pagina.get("next"):
             break
+
+    if snapshot_playlist(playlist["id"]) != snapshot:
+        raise RuntimeError("La playlist è cambiata durante la scansione. Ripeti Cerca duplicati.")
 
     duplicati = []
 
@@ -330,6 +498,8 @@ def scansione_duplicati():
     messaggi.put((
         "duplicati",
         {
+            "playlist_id": playlist["id"],
+            "snapshot_id": snapshot,
             "risultati": duplicati,
             "totale": totale,
             "gruppi": len(duplicati),
@@ -398,17 +568,51 @@ def avvia_ricerca_duplicati():
 # COPIA DEI PREFERITI NELLA PLAYLIST
 # ==========================================================
 
-def richiesta_playlist(metodo, *args, **kwargs):
-    """Rispetta Retry-After; non ritenta scritture dall'esito incerto."""
-    while True:
+class OperazioneInterrotta(RuntimeError):
+    pass
+
+
+def secondi_attesa_spotify(errore, tentativo):
+    attesa = min(60, 5 * (2 ** tentativo))
+    try:
+        suggerita = float((errore.headers or {}).get("Retry-After", attesa))
+        if math.isfinite(suggerita) and suggerita > 0:
+            attesa = max(1, math.ceil(suggerita))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    return attesa
+
+
+def attendi_richiesta_spotify(errore, tentativo, interrompibile=False):
+    attesa = secondi_attesa_spotify(errore, tentativo)
+    stato = getattr(errore, "http_status", None)
+    motivo = "Limite temporaneo Spotify" if stato == 429 else f"Problema temporaneo del server Spotify ({stato})"
+    testo = f"{motivo}. Nuovo tentativo tra {attesa} secondi."
+    messaggi.put(("log", testo))
+    messaggi.put(("stato", testo))
+    if interrompibile:
+        if stop_event.wait(attesa):
+            raise OperazioneInterrotta("Operazione fermata durante l'attesa di Spotify.")
+    else:
+        time.sleep(attesa)
+
+
+def richiesta_playlist(metodo, *args, _interrompibile=False, **kwargs):
+    """Retry-After for 429; server retries only for reads with known outcomes."""
+    lettura = getattr(metodo, "__name__", "") in (
+        "_get", "next", "current_user", "current_user_playlists", "current_user_saved_tracks"
+    )
+    for tentativo in range(5):
+        if _interrompibile and stop_event.is_set():
+            raise OperazioneInterrotta("Operazione fermata.")
         try:
             return metodo(*args, **kwargs)
         except SpotifyException as errore:
-            if errore.http_status != 429:
+            ritentabile = errore.http_status == 429 or (lettura and errore.http_status in (500, 502, 503, 504))
+            if not ritentabile or tentativo == 4:
                 raise
-            attesa = max(1, int((errore.headers or {}).get("Retry-After", 10)))
-            messaggi.put(("log", f"Limite Spotify: attendo {attesa} secondi."))
-            time.sleep(attesa)
+            attendi_richiesta_spotify(errore, tentativo, _interrompibile)
+
 
 
 def copia_preferiti_playlist():
@@ -808,13 +1012,19 @@ def mostra_duplicati(dati):
         contenitore,
         text=(
             "Doppio clic su un risultato per aprirlo su Spotify. "
-            "Nessun brano viene eliminato."
+            "Controlla i risultati prima di eliminare le copie aggiuntive."
         ),
         font=("Segoe UI", 9)
     ).pack(
         anchor="w",
         pady=(10, 5)
     )
+
+    tk.Button(
+        contenitore,
+        text="Elimina copie in più (mantieni una copia)",
+        command=lambda: avvia_rimozione_duplicati(dati, finestra_duplicati)
+    ).pack(pady=(5, 5))
 
     tk.Button(
         contenitore,
@@ -1141,6 +1351,14 @@ def aggiorna_interfaccia():
                 else:
                     messagebox.showerror("Errore copia playlist", testo)
 
+            elif tipo in ("duplicati_rimossi", "errore_rimozione_duplicati"):
+                etichetta_stato.config(text="Rimozione duplicati terminata." if tipo == "duplicati_rimossi" else "Rimozione duplicati interrotta.")
+                scrivi_log(testo)
+                if tipo == "duplicati_rimossi":
+                    messagebox.showinfo("Miei brani", testo + "\nPremi Cerca duplicati per aggiornare i risultati.")
+                else:
+                    messagebox.showerror("Rimozione duplicati interrotta", testo)
+
             elif tipo == "duplicati":
 
                 pulsante_duplicati.config(
@@ -1183,7 +1401,16 @@ def aggiorna_interfaccia():
 # CREAZIONE DELLA FINESTRA
 # ==========================================================
 
+# Give Windows a dedicated identity for the taskbar icon.
+if sys.platform == "win32":
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SpotifyP.Desktop.1")
 finestra = tk.Tk()
+cartella_risorse = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+icona_path = os.path.join(cartella_risorse, "SpotifyP-icon.png")
+if os.path.isfile(icona_path):
+    icona_app = tk.PhotoImage(file=icona_path)
+    finestra.iconphoto(True, icona_app)
 finestra.title("Spotify P")
 finestra.geometry("840x910")
 finestra.minsize(740, 870)
@@ -1212,6 +1439,7 @@ stile.map("Treeview", background=[("selected", "#356849")])
 menu = tk.Menu(finestra, tearoff=False)
 strumenti = tk.Menu(menu, tearoff=False)
 strumenti.add_command(label="Interrompi operazione", command=ferma)
+strumenti.add_command(label="Configura Spotify...", command=configura_spotify)
 menu.add_cascade(label="Strumenti", menu=strumenti)
 finestra.config(menu=menu)
 contenitore = tk.Frame(finestra, bg=BG, padx=28, pady=24)
@@ -1239,7 +1467,7 @@ def scheda(numero, titolo, descrizione, testo, comando):
     return pulsante
 
 pulsante_duplicati = scheda("01", "Cerca duplicati",
-    'Trova i possibili doppioni nella tua playlist "Miei brani".\nNessun brano viene eliminato.',
+    'Trova i possibili doppioni in "Miei brani".\nDai risultati puoi eliminare le copie in più, tenendone una.',
     "Cerca duplicati", avvia_ricerca_duplicati)
 pulsante_playlist = scheda("02", "Copia i tuoi preferiti",
     'Aggiunge i preferiti mancanti a "Miei brani".\nI brani restano anche nei preferiti.',
@@ -1297,4 +1525,8 @@ area_log = scrolledtext.ScrolledText(contenitore, height=6, wrap="word", state="
 area_log.pack(fill="both", expand=True)
 finestra.protocol("WM_DELETE_WINDOW", chiudi)
 aggiorna_interfaccia()
+if "--verifica-avvio" in sys.argv:
+    finestra.after(800, finestra.destroy)
+elif not CLIENT_ID:
+    finestra.after(300, configura_spotify)
 finestra.mainloop()

@@ -2,9 +2,17 @@
 
 Applicazione desktop Python per gestire i preferiti di Spotify e la playlist personale **Miei brani**.
 
+## Installazione su Windows
+
+Scarica [SpotifyP-Setup.exe](https://github.com/danielpleba03-dotcom/spotifapp/releases/latest/download/SpotifyP-Setup.exe), aprilo e segui la procedura guidata. Troverai **Spotify P** nel menu Start. Non serve installare Python.
+
+L'installazione usa la cartella personale `%LOCALAPPDATA%\Programs\SpotifyP`. Configurazione e autorizzazione Spotify sono conservate separatamente in `%LOCALAPPDATA%\SpotifyP`.
+
+In alternativa è disponibile il [pacchetto ZIP portatile](https://github.com/danielpleba03-dotcom/spotifapp/releases/latest/download/SpotifyP-Windows.zip).
+
 ## Funzioni
 
-- Cerca possibili duplicati nella playlist Miei brani, confrontando titolo e artisti normalizzati; non elimina brani.
+- Cerca possibili duplicati nella playlist Miei brani, confrontando titolo e artisti normalizzati; dai risultati puoi rimuovere le copie aggiuntive dopo conferma, conservando la prima copia di ogni gruppo.
 - Copia tutti i preferiti nella playlist, saltando quelli già presenti; crea la playlist privata se manca.
 - Modalità **Rimuovi preferiti**: dopo due minuti continui sullo stesso brano lo rimuove dai preferiti e passa al successivo.
 - Modalità **Aggiungi a Miei brani**: dopo due minuti aggiunge il brano alla playlist, senza modificare i preferiti, e passa al successivo. I brani già presenti vengono saltati immediatamente.

@@ -1,0 +1,59 @@
+name: Pubblica Spotify P 1.1.0
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-windows-once.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.event.head_commit.message == 'Pubblica Spotify P v1.1.0 per Windows'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.15'
+      - name: Prepara applicazione
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt pyinstaller==6.22.3
+          if ($LASTEXITCODE -ne 0) { throw 'Installazione dipendenze fallita' }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name SpotifyP --icon assets/SpotifyP.ico --add-data 'assets/SpotifyP-icon.png;.' --collect-data certifi spotify.py
+          if ($LASTEXITCODE -ne 0) { throw 'Creazione applicazione fallita' }
+          Copy-Item assets/SpotifyP.ico dist/SpotifyP.ico
+          Copy-Item LEGGIMI.txt dist/LEGGIMI.txt
+      - name: Verifica avvio
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath .\dist\SpotifyP.exe -ArgumentList '--verifica-avvio' -PassThru -WindowStyle Hidden
+          if (-not $app.WaitForExit(60000)) { $app.Kill(); throw 'Avvio non completato' }
+          if ($app.ExitCode -ne 0) { throw "Errore avvio: $($app.ExitCode)" }
+      - name: Prepara programma di installazione
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile inno.exe
+          $signature = Get-AuthenticodeSignature .\inno.exe
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B.V.') { throw 'Firma compilatore non valida' }
+          $compiler = Join-Path $env:RUNNER_TEMP 'InnoCompiler'
+          $install = Start-Process .\inno.exe -ArgumentList @('/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/TASKS=',('/DIR="' + $compiler + '"')) -PassThru -Wait -WindowStyle Hidden
+          if ($install.ExitCode -ne 0) { throw 'Preparazione compilatore fallita' }
+          & (Join-Path $compiler 'ISCC.exe') .\packaging\setup.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Creazione installer fallita' }
+          Compress-Archive -LiteralPath .\dist\SpotifyP.exe,.\dist\LEGGIMI.txt -DestinationPath .\dist\SpotifyP-Windows.zip
+          Get-FileHash .\dist\SpotifyP-Setup.exe -Algorithm SHA256 | ForEach-Object { $_.Hash + '  SpotifyP-Setup.exe' } | Set-Content .\dist\SHA256SUMS.txt
+      - name: Pubblica questa versione
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          $note = 'Versione Windows con installer, icona dedicata e collegamento nel menu Start. Include rimozione dei duplicati e gestione degli errori temporanei di Spotify. Scarica SpotifyP-Setup.exe e segui la procedura guidata. Le credenziali personali restano sul computer.'
+          gh release create v1.1.0 .\dist\SpotifyP-Setup.exe .\dist\SpotifyP-Windows.zip .\dist\SHA256SUMS.txt --target $env:COMMIT_SHA --title 'Spotify P 1.1.0 per Windows' --notes $note --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Pubblicazione release fallita' }
