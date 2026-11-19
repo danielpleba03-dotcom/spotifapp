@@ -16,21 +16,26 @@
 <body>
   <header class="topbar">
     <a class="brand" href="./" aria-label="Spotify P, pagina iniziale"><img src="assets/icon-192.png" width="44" height="44" alt=""><span>Spotify <b>P</b></span></a>
-    <nav aria-label="Applicazione">
-      <button id="install" class="button subtle">Installa app</button>
-      <button id="settings" class="button subtle">Impostazioni</button>
-      <button id="connect" class="button green">Collega Spotify</button>
-      <button id="disconnect" class="button subtle" hidden>Esci</button>
-    </nav>
   </header>
 
-  <main>
+  <section id="welcome" class="welcome" aria-labelledby="welcome-title">
+    <div class="welcome-card">
+      <img src="assets/icon-192.png" width="88" height="88" alt="" class="welcome-icon">
+      <p class="eyebrow">BENVENUTO IN SPOTIFY P</p>
+      <h1 id="welcome-title">La tua musica,<br><span>in ordine.</span></h1>
+      <p>Accedi con il tuo account Spotify per iniziare. L’app ricorderà il collegamento alle prossime aperture.</p>
+      <button id="welcome-connect" class="button green primary-action" disabled>Accedi con Spotify</button>
+      <p id="welcome-status" class="small" role="status">Controllo del collegamento in corso…</p>
+      <p id="welcome-error" class="error" role="alert"></p>
+    </div>
+  </section>
+
+  <main id="application" hidden>
     <section class="intro">
       <div><p class="eyebrow">LA TUA LIBRERIA, CON CURA</p><h1>La tua musica,<br><span>in ordine.</span></h1><p class="intro-copy">Tieni ciò che ami. Fai spazio al prossimo ascolto.</p></div>
       <div class="account"><span id="account-label">Pronta a collegarsi</span><span class="account-caption">Il tuo account Spotify, la tua playlist.</span></div>
     </section>
 
-    <section id="connection-note" class="notice"><div><strong>Cominciamo dalla tua musica.</strong><p>Collega Spotify per gestire “Miei brani” e i preferiti.</p></div><button id="connect-intro" class="button green">Collega Spotify</button></section>
     <section id="recovery" class="notice recovery" hidden><div><strong id="recovery-title">Backup della playlist disponibile</strong><p id="recovery-description"></p></div><div class="button-row"><button id="resume" class="button green">Completa pulizia</button><button id="download-backup" class="button secondary">Scarica backup</button><button id="restore" class="button secondary">Ripristina originale</button></div></section>
 
     <div class="workspace">
@@ -62,7 +67,6 @@
     <footer>Spotify P <span>La tua musica viene gestita dal tuo browser.</span><a href="https://github.com/danielpleba03-dotcom/spotifapp" target="_blank" rel="noopener noreferrer">Progetto su GitHub</a></footer>
   </main>
 
-  <dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form"><button type="button" class="close-dialog" data-close aria-label="Chiudi">×</button><p class="eyebrow">PRIMO COLLEGAMENTO</p><h2 id="settings-title">Collega la tua applicazione Spotify.</h2><p>Usa il Client ID della tua app Spotify. La prima volta, aggiungi questo indirizzo tra i <strong>Redirect URIs</strong> nelle impostazioni della tua app su Spotify for Developers.</p><div class="redirect-box"><code id="redirect-uri"></code><button type="button" id="copy-redirect" class="button compact">Copia indirizzo</button></div><a class="text-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Apri le impostazioni Spotify</a><label class="field-label" for="client-id">Client ID</label><input id="client-id" name="client-id" type="text" autocomplete="off" spellcheck="false" maxlength="32" pattern="[a-fA-F0-9]{32}" required placeholder="Il Client ID di 32 caratteri"><p class="small">Il collegamento viene salvato in questo browser. Spotify ti chiederà di autorizzare l’accesso al tuo account.</p><button class="button green primary-action" type="submit">Salva e collega Spotify</button><p id="settings-error" class="error" role="alert"></p></form></dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p><div class="button-row"><button class="button secondary" value="cancel" autofocus>Annulla</button><button id="confirm-yes" class="button green" value="confirm">Conferma</button></div></form></dialog>
   <dialog id="error-dialog" aria-labelledby="error-title"><h2 id="error-title">Controlla questo passaggio.</h2><p id="error-message"></p><form method="dialog"><button class="button green" value="close">Ho capito</button></form></dialog>
 </body>
