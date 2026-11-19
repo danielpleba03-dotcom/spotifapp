@@ -1,7 +1,7 @@
 import {
   STORAGE, SpotifyClient, SpotifyError, sleep, createAuthorization, validateCallback,
   trackOf, itemUri, analyzeDuplicates, makeDedupPlan, advanceListening, applyPlaylistPlan,
-} from './core.js';
+} from './core.js?v=20261120-fetch';
 import { DEFAULT_CLIENT_ID } from './config.js';
 
 const $ = id => document.getElementById(id);
