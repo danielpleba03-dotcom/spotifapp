@@ -660,50 +660,10 @@ dialog .button-row {
   margin-top:26px;
 }
 
-.close-dialog {
-  position:absolute;
-  right:14px;
-  top:8px;
-  background:transparent;
-  border:0;
-  color:var(--muted);
-  font-size:1.8rem;
-  line-height:1;
-  padding:8px;
-}
 
-.redirect-box {
-  background:#101b14;
-  padding:14px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  margin:18px 0;
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:12px;
-}
 
-.redirect-box code {
-  font-size:.875rem;
-  overflow-wrap:anywhere;
-}
 
-.field-label {
-  display:block;
-  margin:26px 0 8px;
-  font-weight:600;
-}
 
-#client-id {
-  width:100%;
-  background:#101b14;
-  border:1px solid #506c59;
-  border-radius:10px;
-  padding:13px;
-  color:var(--text);
-  font-family:ui-monospace,Consolas,monospace;
-}
 
 .error {
   color:#ffb5c1;
@@ -884,4 +844,39 @@ dialog .button-row {
     transition:none!important;
   }
 
+}
+
+.welcome {
+  min-height: calc(100dvh - 110px);
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+}
+
+.welcome-card {
+  width: min(100%, 470px);
+  text-align: center;
+}
+
+.welcome-icon {
+  border-radius: 24px;
+  margin-bottom: 22px;
+}
+
+.welcome-card h1 {
+  font-size: clamp(2.6rem, 7vw, 3.5rem);
+  margin-bottom: 24px;
+}
+
+.welcome-card > p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.welcome-card .primary-action {
+  margin-top: 12px;
+}
+
+.welcome-card .error {
+  color: var(--danger);
 }
