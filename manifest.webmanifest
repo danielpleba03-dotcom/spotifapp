@@ -1,16 +1,27 @@
 {
-  "id": "./",
+  "id": "/spotifapp/",
   "name": "Spotify P",
   "short_name": "Spotify P",
   "description": "La tua musica, in ordine. Gestisci Miei brani e i preferiti Spotify.",
   "lang": "it",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/spotifapp/",
+  "scope": "/spotifapp/",
   "display": "standalone",
   "background_color": "#101813",
   "theme_color": "#101813",
   "icons": [
-    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ]
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "prefer_related_applications": false
 }
