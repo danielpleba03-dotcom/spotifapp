@@ -6,7 +6,7 @@ import { DEFAULT_CLIENT_ID } from './config.js';
 
 const $ = id => document.getElementById(id);
 const redirectUri = new URL('./', location.href).href;
-const state = { client: null, user: null, job: null, controller: null, scan: null, install: null };
+const state = { client: null, user: null, job: null, controller: null, scan: null, authenticating: true };
 
 if (!localStorage.getItem(STORAGE.client) && DEFAULT_CLIENT_ID) localStorage.setItem(STORAGE.client, DEFAULT_CLIENT_ID);
 
@@ -22,6 +22,10 @@ function showError(error) {
   const message = error?.message || 'Operazione non completata. Riprova.';
   log(message);
   status(message);
+  if (!state.user) {
+    $('welcome-error').textContent = message;
+    return;
+  }
   $('error-title').textContent = 'Controlla questo passaggio.';
   $('error-message').textContent = message;
   if (!$('error-dialog').open) $('error-dialog').showModal();
@@ -46,12 +50,12 @@ function refreshControls() {
   else monitor.textContent = 'Avvia';
   monitor.classList.toggle('running', state.job === 'monitor');
   $('stop').hidden = !busy || state.job === 'monitor';
-  $('settings').disabled = busy;
-  $('connect').hidden = connected;
-  $('connect').disabled = busy;
-  $('disconnect').hidden = !connected;
-  $('disconnect').disabled = busy;
-  $('connection-note').hidden = connected;
+  $('application').hidden = !connected;
+  $('welcome').hidden = connected;
+  $('welcome-connect').disabled = state.authenticating;
+  $('welcome-status').textContent = state.authenticating
+    ? 'Controllo del collegamento in corso…'
+    : 'Ti verrà chiesto l’accesso soltanto quando serve rinnovare l’autorizzazione.';
   $('clean').disabled = busy || !connected;
   $('resume').disabled = busy || !connected;
   $('restore').disabled = busy || !connected;
@@ -62,7 +66,7 @@ function refreshControls() {
 
 async function runJob(name, work) {
   if (state.job) return;
-  if (!state.user) return openSettings();
+  if (!state.user) return refreshControls();
   const execute = async lock => {
     if (lock === null) return showError(new Error('Un’altra finestra di Spotify P sta lavorando sul tuo account. Fermala prima di continuare.'));
     state.job = name;
@@ -85,16 +89,9 @@ async function runJob(name, work) {
   else await execute(undefined);
 }
 
-function openSettings() {
-  if (state.job) return;
-  $('client-id').value = localStorage.getItem(STORAGE.client) || '';
-  $('settings-error').textContent = '';
-  $('settings-dialog').showModal();
-}
-
 async function authorize() {
   const clientId = localStorage.getItem(STORAGE.client);
-  if (!clientId) return openSettings();
+  if (!clientId) throw new Error('Collegamento Spotify non disponibile. Riprova più tardi.');
   location.assign(await createAuthorization(clientId, redirectUri));
 }
 
@@ -104,7 +101,7 @@ async function connectAccount() {
   if (!clientId) {
     if (params.has('code') || params.has('error')) {
       history.replaceState({}, '', new URL('./', location.href));
-      throw new Error('La configurazione è assente in questo browser. Inserisci il Client ID e ricollega Spotify.');
+      throw new Error('Il collegamento non è disponibile in questo browser. Riprova ad accedere con Spotify.');
     }
     return;
   }
@@ -113,7 +110,7 @@ async function connectAccount() {
     history.replaceState({}, '', new URL('./', location.href));
     if (params.has('error')) {
       sessionStorage.removeItem(STORAGE.transaction);
-      throw new Error('Il collegamento Spotify è stato annullato. Puoi riprovare quando vuoi.');
+      throw new Error('L’accesso Spotify è stato annullato. Puoi riprovare quando vuoi.');
     }
     const transaction = validateCallback(params.get('state'));
     status('Sto completando il collegamento con Spotify…');
@@ -369,33 +366,16 @@ async function clearFavorites() {
   });
 }
 
-$('settings').addEventListener('click', openSettings);
-$('redirect-uri').textContent = redirectUri;
-$('settings-dialog').querySelector('[data-close]').addEventListener('click', () => $('settings-dialog').close());
-$('copy-redirect').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(redirectUri); $('copy-redirect').textContent = 'Copiato'; }
-  catch { $('settings-error').textContent = 'Seleziona l’indirizzo mostrato e copialo.'; }
-});
-for (const id of ['connect', 'connect-intro']) $(id).addEventListener('click', () => authorize().catch(showError));
-$('settings-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const value = $('client-id').value.trim();
-  if (!/^[a-fA-F0-9]{32}$/.test(value)) { $('settings-error').textContent = 'Inserisci il Client ID Spotify di 32 caratteri.'; return; }
-  if (localStorage.getItem(STORAGE.client) !== value) localStorage.removeItem(STORAGE.auth);
-  localStorage.setItem(STORAGE.client, value);
-  $('settings-dialog').close();
-  try { await authorize(); } catch (error) { showError(error); }
-});
-$('disconnect').addEventListener('click', () => {
-  localStorage.removeItem(STORAGE.auth);
-  sessionStorage.removeItem(STORAGE.transaction);
-  state.user = null;
-  state.scan = null;
-  $('duplicate-results').hidden = true;
+$('welcome-connect').addEventListener('click', async () => {
+  state.authenticating = true;
+  $('welcome-error').textContent = '';
   refreshControls();
-  updateTrack(null);
-  updateTimer();
-  status('Account scollegato da Spotify P.');
+  try { await authorize(); }
+  catch (error) {
+    state.authenticating = false;
+    refreshControls();
+    showError(error);
+  }
 });
 $('monitor').addEventListener('click', () => {
   if (state.job === 'monitor') state.controller.abort();
@@ -437,24 +417,6 @@ $('restore').addEventListener('click', async () => {
   });
 });
 
-window.addEventListener('beforeinstallprompt', event => {
-  event.preventDefault();
-  state.install = event;
-  $('install').hidden = matchMedia('(display-mode: standalone)').matches;
-});
-$('install').addEventListener('click', async () => {
-  if (!state.install) {
-    $('error-title').textContent = 'Installa Spotify P';
-    $('error-message').textContent = 'Apri questa pagina in Google Chrome. Se la finestra di installazione non compare ancora, apri il menu di Chrome e scegli la voce per installare la pagina come app. Potrai poi aprire Spotify P dal menu Start.';
-    $('error-dialog').showModal();
-    return;
-  }
-  await state.install.prompt();
-  await state.install.userChoice;
-  state.install = null;
-  $('install').hidden = true;
-});
-window.addEventListener('appinstalled', () => { $('install').hidden = true; log('Spotify P è installata. La trovi tra le tue app.'); });
 window.addEventListener('offline', () => {
   state.controller?.abort();
   status('Connessione assente. Torna online per usare Spotify.');
@@ -464,9 +426,10 @@ window.addEventListener('beforeunload', event => {
 });
 
 async function initialize() {
-  $('install').hidden = matchMedia('(display-mode: standalone)').matches;
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => log('Installazione offline non disponibile in questo browser.'));
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/spotifapp/sw.js', { scope: '/spotifapp/', updateViaCache: 'none' }).catch(() => log('Installazione offline non disponibile in questo browser.'));
+  refreshControls();
   try { await connectAccount(); } catch (error) { showError(error); }
+  state.authenticating = false;
   refreshControls();
 }
 initialize();
