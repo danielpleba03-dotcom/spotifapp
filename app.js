@@ -22,6 +22,7 @@ function showError(error) {
   const message = error?.message || 'Operazione non completata. Riprova.';
   log(message);
   status(message);
+  $('error-title').textContent = 'Controlla questo passaggio.';
   $('error-message').textContent = message;
   if (!$('error-dialog').open) $('error-dialog').showModal();
 }
@@ -442,7 +443,12 @@ window.addEventListener('beforeinstallprompt', event => {
   $('install').hidden = matchMedia('(display-mode: standalone)').matches;
 });
 $('install').addEventListener('click', async () => {
-  if (!state.install) return;
+  if (!state.install) {
+    $('error-title').textContent = 'Installa Spotify P';
+    $('error-message').textContent = 'Apri questa pagina in Google Chrome. Se la finestra di installazione non compare ancora, apri il menu di Chrome e scegli la voce per installare la pagina come app. Potrai poi aprire Spotify P dal menu Start.';
+    $('error-dialog').showModal();
+    return;
+  }
   await state.install.prompt();
   await state.install.userChoice;
   state.install = null;
@@ -458,6 +464,7 @@ window.addEventListener('beforeunload', event => {
 });
 
 async function initialize() {
+  $('install').hidden = matchMedia('(display-mode: standalone)').matches;
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => log('Installazione offline non disponibile in questo browser.'));
   try { await connectAccount(); } catch (error) { showError(error); }
   refreshControls();
